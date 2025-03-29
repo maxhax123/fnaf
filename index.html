@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Five Nights at Felipe’s</title>
+  <title>Five Nights at Felipe's</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Retro FNaF style font -->
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -98,23 +98,7 @@
       background-position: center;
       transition: background-image 0.5s ease-in-out;
     }
-    /* Placeholder for cam UI */
-    #camUI {
-      display: none;
-    }
-    /* Dual CAM UI container (only used when in full-screen CAM mode) */
-    #dualCamContainer {
-      display: none;
-      width: 100%;
-      height: 100%;
-    }
-    #dualCamContainer img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border: 2px solid lime;
-    }
-    /* Switch Cam Panel (bottom left when CAM mode is active) */
+    /* Switch Cam Panel (bottom left for switching between Stage/Hall) */
     #switchCamPanel {
       position: absolute;
       bottom: 20px;
@@ -123,6 +107,33 @@
       display: none;
     }
     #switchCamPanel button {
+      background: black;
+      border: 2px solid lime;
+      padding: 5px 8px;
+    }
+    /* Fix Server Panel (bottom right, appears when server is down) */
+    #fixServerPanel {
+      position: absolute;
+      bottom: 20px;
+      right: 10px;
+      z-index: 7;
+      display: none;
+    }
+    #fixServerPanel button {
+      background: black;
+      border: 2px solid lime;
+      padding: 5px 8px;
+      transition: background-color 0.2s;
+    }
+    /* Server Cam Button (for manually switching to server cam) */
+    #serverCamButton {
+      position: absolute;
+      bottom: 20px;
+      left: 150px;
+      z-index: 7;
+      display: block;
+    }
+    #serverCamButton button {
       background: black;
       border: 2px solid lime;
       padding: 5px 8px;
@@ -189,7 +200,7 @@
   <div id="mainMenu">
     <div id="menuImage"></div>
     <div id="menuOptions">
-      <h1>Five Nights at Felipe’s</h1>
+      <h1>Five Nights at Felipe's</h1>
       <button id="playBtn" disabled onclick="startGame()">Play</button>
       <button id="customBtn" disabled onclick="openCustomSettings()">Custom Night Settings</button>
     </div>
@@ -210,13 +221,20 @@
   
   <!-- GAME SCREEN -->
   <div id="game">
+<div id="camUI"></div>
     <!-- Main display area -->
     <div id="display"></div>
-    <!-- Optional cam UI (placeholder) -->
-    <div id="camUI"></div>
-    <!-- Switch Cam Panel (only appears when CAM mode is active) -->
+    <!-- Switch Cam Panel (for switching between Stage and Hall in CAM mode) -->
     <div id="switchCamPanel">
       <button onclick="switchActiveCam()">Switch Cam</button>
+    </div>
+    <!-- Server Cam Button (to manually switch to server cam) -->
+    <div id="serverCamButton">
+      <button onclick="switchToServer()">Server Cam</button>
+    </div>
+    <!-- Fix Server Panel (appears when server is down) -->
+    <div id="fixServerPanel">
+      <button id="fixServerButton" onclick="fixServer()">Fix Server</button>
     </div>
     <!-- Control Panel for toggles -->
     <div id="controlPanel">
@@ -231,7 +249,7 @@
     </div>
     <!-- Jumpscare overlay -->
     <div id="jumpscare">
-      <video id="jumpscareVideo" src="https://github.com/maxhax123/fnaf/raw/refs/heads/main/rawr.mov" autoplay></video>
+      <video id="jumpscareVideo" autoplay></video>
     </div>
     <!-- Victory overlay -->
     <div id="victory">You Survived!</div>
@@ -253,7 +271,7 @@
     function getDifficultyFactor() {
       return 1 + (currentNight - 1) * 0.2;
     }
-  
+
     /******** ASSET PRELOADING ********/
     // Assets:
     const officeImg = "https://github.com/maxhax123/fnaf/blob/main/office.png?raw=true";
@@ -273,6 +291,9 @@
       "https://github.com/maxhax123/fnaf/blob/main/halls4.png?raw=true",
       "https://github.com/maxhax123/fnaf/blob/main/hallsfelipeindoor.png?raw=true"
     ];
+    // Server Cam assets:
+    const serverCamFelipa = "https://github.com/maxhax123/fnaf/blob/main/servercamsfelipa.png?raw=true";
+    const serverCamHealthy = "https://github.com/maxhax123/fnaf/blob/main/servercamshealthy.png?raw=true";
     const phoneCalls = [
       "https://raw.githubusercontent.com/maxhax123/fnaf/refs/heads/main/Nightonephoneguy.m4a",
       "https://raw.githubusercontent.com/maxhax123/fnaf/refs/heads/main/Phoneguynight2.m4a",
@@ -280,12 +301,15 @@
       "https://raw.githubusercontent.com/maxhax123/fnaf/refs/heads/main/Phoneguynight4.m4a",
       "https://raw.githubusercontent.com/maxhax123/fnaf/refs/heads/main/Night5phoneguy.m4a"
     ];
-    const jumpscareVideoURL = "https://github.com/maxhax123/fnaf/raw/refs/heads/main/rawr.mov";
+    // Felipa's jumpscare video:
+    const felipaJumpscareVideoURL = "https://github.com/maxhax123/fnaf/raw/refs/heads/main/copy_BCE70321-E592-468D-9022-982DCCAA3319.mov";
     const victorySoundURL = "https://github.com/maxhax123/fnaf/raw/refs/heads/main/Untitled.m4a";
     const doorSoundURL = "https://raw.githubusercontent.com/maxhax123/fnaf/refs/heads/main/doorsound.mp3";
     const camOpenSoundURL = "https://raw.githubusercontent.com/maxhax123/fnaf/refs/heads/main/cameraopen.mp3";
     const staticSoundURL = "https://raw.githubusercontent.com/maxhax123/fnaf/refs/heads/main/static.mp3";
-  
+    let nightDuration = 180;
+    let initialNightTime = nightDuration; // Use nightDuration as initial value
+
     function preloadImage(url) {
       return new Promise((resolve, reject) => {
         const img = new Image();
@@ -318,8 +342,10 @@
       promises.push(preloadImage(felipeAtDoorImg));
       stageCam.forEach(url => promises.push(preloadImage(url)));
       hallCam.forEach(url => promises.push(preloadImage(url)));
+      promises.push(preloadImage(serverCamFelipa));
+      promises.push(preloadImage(serverCamHealthy));
       phoneCalls.forEach(url => promises.push(preloadAudio(url)));
-      promises.push(preloadVideo(jumpscareVideoURL));
+      promises.push(preloadVideo(felipaJumpscareVideoURL));
       promises.push(preloadAudio(victorySoundURL));
       promises.push(preloadAudio(doorSoundURL));
       promises.push(preloadAudio(camOpenSoundURL));
@@ -338,12 +364,12 @@
       console.error("Asset loading error:", err);
       alert("Error loading assets. Please try again.");
     });
-  
-    /******** MAIN MENU & SETTINGS *******/  
+
+    /******** MAIN MENU & SETTINGS *******/
     const mainMenu = document.getElementById("mainMenu");
     const customSettings = document.getElementById("customSettings");
     const gameDiv = document.getElementById("game");
-  
+
     function startGame() {
       customNight = false;
       totalNights = 5;
@@ -352,10 +378,7 @@
       mainMenu.style.display = "none";
       customSettings.style.display = "none";
       gameDiv.style.display = "block";
-      // Delay initialization to ensure game elements are rendered
-      setTimeout(() => {
-        initGame();
-      }, 50);
+      initGame();
     }
     function openCustomSettings() {
       mainMenu.style.display = "none";
@@ -365,7 +388,7 @@
       customSettings.style.display = "none";
       mainMenu.style.display = "flex";
     }
-  
+
     /******** CUSTOM NIGHT SETTINGS VARIABLES ********/
     let customNight = false;
     let aiMoveChanceMultiplier = 1.0;
@@ -378,35 +401,42 @@
       mainMenu.style.display = "none";
       customSettings.style.display = "none";
       gameDiv.style.display = "block";
-      // Delay initialization to ensure game elements are rendered
-      setTimeout(() => {
-        initGame();
-      }, 50);
+      initGame();
     }
-  
+
     /******** GAME VARIABLES ********/
     let currentNight = 1;
     let totalNights = 5; // Overridden in custom mode.
-    const nightDuration = 180; // seconds per night
+    nightDuration = 180; // seconds per night
     let remainingTime = nightDuration;
     let power = 100;
     let doorClosed = false;
     let camsOpen = false; // If true, CAM view is active.
     let lookingBehind = false; // "Look Behind" mode.
-    // felipePhase: 0-2 => Stage Cam phases; 3-8 => Hall Cam phases; 9 => Felipe at door.
+    // felipePhase: 0-2 => Stage Cam; 3-8 => Hall Cam; 9 => Felipe at door.
     let felipePhase = 0;
     let powerLossTriggered = false;
-    let gameTimer, aiInterval;
+    let gameTimer, aiInterval, interferenceTimer;
     let felipeAttackTimeout = null;
     let felipeRetreatTimeout = null;
     let phoneCallTimeout = null;
-  
-    // Default active cam is "stage"
-    let activeCam = "stage"; // Options: "stage" or "hall"
-  
+
+    // Server fix variables:
+    let serverDown = false;
+    let serverFixProgress = 0;
+    const serverFixThreshold = 100;
+    const serverFixDuration = 10000; // 10 seconds to fix
+    let serverFixStartTime = 0;
+
+    // Active cam options: "stage", "hall", "server"
+    let activeCam = "stage";
+
     const display = document.getElementById("display");
     const camUI = document.getElementById("camUI");
     const switchCamPanel = document.getElementById("switchCamPanel");
+    const fixServerPanel = document.getElementById("fixServerPanel");
+    const fixServerButton = document.getElementById("fixServerButton");
+    const serverCamButton = document.getElementById("serverCamButton");
     const powerText = document.getElementById("power");
     const nightText = document.getElementById("nightDisplay");
     const jumpscare = document.getElementById("jumpscare");
@@ -416,12 +446,16 @@
     const doorSound = document.getElementById("doorSound");
     const camOpenSound = document.getElementById("camOpenSound");
     const staticSound = document.getElementById("staticSound");
-  
+
     /******** CAMERA SWITCHING (FNaF-style UI) ********/
     function toggleCams() {
       camsOpen = !camsOpen;
       if (camsOpen) {
-        activeCam = "stage"; // default to stage when turning on cams
+        if (serverDown) {
+          activeCam = "server";
+        } else {
+          activeCam = "stage";
+        }
         camOpenSound.currentTime = 0;
         camOpenSound.play();
         staticSound.currentTime = 0;
@@ -439,10 +473,16 @@
       updateDisplay();
     }
     function switchActiveCam() {
-      activeCam = (activeCam === "stage") ? "hall" : "stage";
+      if (!serverDown) {
+        activeCam = (activeCam === "stage") ? "hall" : "stage";
+      }
       updateDisplay();
     }
-  
+    function switchToServer() {
+      activeCam = "server";
+      updateDisplay();
+    }
+
     /******** UPDATE CAM DISPLAY ********/
     function updateCamDisplay() {
       let camImg = "";
@@ -456,26 +496,20 @@
         } else {
           camImg = hallCam[5];
         }
+      } else if (activeCam === "server") {
+        camImg = serverDown ? serverCamFelipa : serverCamHealthy;
       }
-      if (display) {
-        display.style.backgroundImage = `url(${camImg})`;
-      }
+      display.style.backgroundImage = `url(${camImg})`;
     }
-  
+
     /******** DISPLAY UPDATE ********/
     function updateDisplay() {
-      // Ensure required elements exist before accessing
-      if (!display) {
-        console.error("Error: #display element is missing!");
-        return;
-      }
-      // Debug logs to check element status
-      // console.log("Display element:", display);
-  
       if (lookingBehind) {
-        if (camUI) camUI.style.display = "none";
-        if (document.getElementById("switchCamPanel"))
-          document.getElementById("switchCamPanel").style.display = "none";
+        camUI.style.display = "none";
+        switchCamPanel.style.display = "none";
+        fixServerPanel.style.display = "none";
+        serverCamButton.style.display = "none";
+        display.innerHTML = "";
         if (doorClosed) {
           display.style.backgroundImage = `url(${doorClosedImg})`;
         } else if (felipePhase >= 9) {
@@ -484,24 +518,30 @@
           display.style.backgroundImage = `url(${doorOpenImg})`;
         }
       } else if (camsOpen) {
-        if (camUI) camUI.style.display = "none";
-        if (document.getElementById("switchCamPanel"))
-          document.getElementById("switchCamPanel").style.display = "block";
+        if (serverDown) {
+          activeCam = "server";
+          fixServerPanel.style.display = "block";
+          switchCamPanel.style.display = "none";
+          serverCamButton.style.display = "block";
+        } else {
+          fixServerPanel.style.display = "none";
+          switchCamPanel.style.display = "block";
+          serverCamButton.style.display = "block";
+        }
+        camUI.style.display = "none";
         updateCamDisplay();
       } else {
-        if (camUI) camUI.style.display = "none";
-        if (document.getElementById("switchCamPanel"))
-          document.getElementById("switchCamPanel").style.display = "none";
+        camUI.style.display = "none";
+        switchCamPanel.style.display = "none";
+        fixServerPanel.style.display = "none";
+        serverCamButton.style.display = "none";
+        display.innerHTML = "";
         display.style.backgroundImage = `url(${officeImg})`;
       }
-      if (nightText) {
-        nightText.innerText = `Night ${currentNight} - ${formatTime(remainingTime)}`;
-      }
-      if (powerText) {
-        powerText.innerText = "Power: " + Math.floor(power) + "%";
-      }
+      nightText.innerText = `Night ${currentNight} - ${formatTime(remainingTime)}`;
+      powerText.innerText = "Power: " + Math.floor(power) + "%";
     }
-  
+
     /******** POWER & TIME MANAGEMENT ********/
     function reducePower() {
       const factor = getDifficultyFactor();
@@ -511,21 +551,21 @@
       drain *= powerDrainMultiplier;
       power -= drain;
       if (power < 0) power = 0;
-      if (powerText) {
-        powerText.innerText = "Power: " + Math.floor(power) + "%";
-      }
+      powerText.innerText = "Power: " + Math.floor(power) + "%";
       if (power <= 0 && !powerLossTriggered) {
         triggerFreddyMode();
       }
     }
     function gameTick() {
       remainingTime--;
+      // Felipa interference: repeatedly every (nightDuration/currentNight) seconds.
+      // We use an interference timer that is set up separately.
       updateDisplay();
       if (remainingTime <= 0) {
         nightVictory();
       }
     }
-  
+
     /******** FELIPE AI (Stage/Hall Movement) ********/
     function felipeAI() {
       if (!camsOpen && !lookingBehind) {
@@ -573,7 +613,7 @@
       updateDisplay();
       reducePower();
     }
-  
+
     /******** FREDDY MODE TRIGGER ********/
     function triggerFreddyMode() {
       powerLossTriggered = true;
@@ -586,16 +626,22 @@
         }
       }, Math.random() * 5000 + 3000);
     }
-  
+
     /******** JUMPSCARE & GAME OVER ********/
     function triggerJumpscare() {
       clearIntervals();
+      // Use Felipa's jumpscare video if serverDown.
+      if (serverDown) {
+        jumpscareVideo.src = felipaJumpscareVideoURL;
+      } else {
+        jumpscareVideo.src = felipaJumpscareVideoURL;
+      }
       jumpscare.style.display = "flex";
       setTimeout(() => {
         location.reload();
       }, 5000);
     }
-  
+
     /******** VICTORY & NIGHT TRANSITION ********/
     function nightVictory() {
       clearIntervals();
@@ -618,12 +664,14 @@
       doorClosed = false;
       camsOpen = false;
       lookingBehind = false;
+      serverDown = false;
       victoryOverlay.style.display = "none";
       updateDisplay();
+      clearInterval(interferenceTimer);
       startGameIntervals();
       startNightTransition();
     }
-  
+
     /******** NIGHT TRANSITION (Fade-In & Phone Call) ********/
     function startNightTransition() {
       gameDiv.style.opacity = "0";
@@ -636,17 +684,40 @@
         phoneCallAudio.play();
       }, 4000);
     }
-  
+
+    /******** INTERFERENCE TIMER FOR FELIPA ********/
+    function startInterferenceTimer() {
+      // Calculate interval as (nightDuration / currentNight) seconds.
+      let interval = (nightDuration / currentNight) * 1000;
+      interferenceTimer = setInterval(() => {
+        if (!serverDown && Math.random() < 0.75) {
+          serverDown = true;
+          activeCam = "server";
+          serverFixProgress = 0;
+          serverFixStartTime = Date.now();
+          staticSound.currentTime = 0;
+          staticSound.play();
+        }
+        updateDisplay();
+      }, interval);
+    }
+
+    function clearInterferenceTimer() {
+      clearInterval(interferenceTimer);
+    }
+
     /******** INTERVAL MANAGEMENT ********/
     function startGameIntervals() {
       gameTimer = setInterval(gameTick, 1000);
       aiInterval = setInterval(felipeAI, 1500);
+      startInterferenceTimer();
     }
     function clearIntervals() {
       clearInterval(gameTimer);
       clearInterval(aiInterval);
+      clearInterferenceTimer();
     }
-  
+
     /******** CONTROL BUTTONS ********/
     function toggleDoor() {
       doorClosed = !doorClosed;
@@ -658,7 +729,30 @@
       doorSound.play();
       updateDisplay();
     }
-  
+
+    /******** FIX SERVER MECHANIC ********/
+    document.addEventListener("keydown", function(e) {
+      if (serverDown && e.key.toLowerCase() === "e") {
+        fixServerProgress(10);
+      }
+    });
+    function fixServerProgress(amount) {
+      serverFixProgress += amount;
+      if (serverFixProgress > serverFixThreshold) serverFixProgress = serverFixThreshold;
+      let brightness = Math.floor((serverFixProgress / serverFixThreshold) * 255);
+      document.getElementById("fixServerButton").style.backgroundColor = `rgb(${brightness},${brightness},0)`;
+      if (serverFixProgress >= serverFixThreshold) {
+        serverDown = false;
+        serverFixProgress = 0;
+        fixServerPanel.style.display = "none";
+        activeCam = "stage";
+        updateDisplay();
+      }
+    }
+    function fixServer() {
+      fixServerProgress(10);
+    }
+
     /******** INITIALIZE GAME ********/
     function initGame() {
       currentNight = 1;
@@ -669,6 +763,8 @@
       lookingBehind = false;
       felipePhase = 0;
       powerLossTriggered = false;
+      serverDown = false;
+      serverFixProgress = 0;
       if (felipeAttackTimeout !== null) {
         clearTimeout(felipeAttackTimeout);
         felipeAttackTimeout = null;
